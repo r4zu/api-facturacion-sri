@@ -375,7 +375,7 @@ export class PdfController {
     FileInterceptor('pdf', {
       storage: diskStorage({
         destination: (req, file, cb) => {
-          const type = req.params.type;
+          const type = req.params.type as string;
           const validTypes = ['con_firma', 'others'];
           if (!validTypes.includes(type)) {
             return cb(new Error('Tipo inválido'), '');

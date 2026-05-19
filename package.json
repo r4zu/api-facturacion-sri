@@ -33,14 +33,16 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "docker:build": "docker build -t open-api-facturacion-sri .",
-    "docker:run": "docker run -d -p 3001:3001 --name open-api-facturacion-sri open-api-facturacion-sri",
-    "docker:up": "docker compose up -d --build",
-    "docker:down": "docker compose down",
-    "docker:logs": "docker compose logs -f",
-    "docker:dev": "docker compose -f docker-compose.yml up --build",
-    "docker:tag": "docker tag open-api-facturacion-sri angelobarzola/open-api-facturacion-sri:latest",
-    "docker:push": "npm run docker:build && docker tag open-api-facturacion-sri angelobarzola/open-api-facturacion-sri:latest && docker push angelobarzola/open-api-facturacion-sri:latest"
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate dev",
+    "db:migrate:name": "prisma migrate dev --name",
+    "db:studio": "prisma studio",
+    "compose:up": "docker compose -f docker-compose.dev.yml up -d",
+    "compose:down": "docker compose -f docker-compose.dev.yml down --remove-orphans",
+    "compose:down:volumes": "docker compose -f docker-compose.dev.yml down --volumes --remove-orphans",
+    "compose:prod:up": "docker compose -f docker-compose.yml up --build",
+    "compose:prod:down": "docker compose -f docker-compose.yml down --remove-orphans"
   },
   "dependencies": {
     "@nestjs/axios": "^4.0.1",
@@ -84,6 +86,7 @@
     "rxjs": "^7.8.1",
     "soap": "^1.9.1",
     "xadesjs": "^2.6.5",
+    "xml-core": "^1.2.5",
     "xml2js": "^0.6.2",
     "xmldom": "^0.6.0"
   },
