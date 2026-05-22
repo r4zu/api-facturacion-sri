@@ -101,6 +101,9 @@ importers:
       ioredis:
         specifier: ^5.10.1
         version: 5.10.1
+      multer:
+        specifier: ^2.1.1
+        version: 2.1.1
       node-forge:
         specifier: ^1.3.3
         version: 1.4.0

@@ -77,7 +77,12 @@ export class AuditService {
     fechaHasta?: string;
     page?: number;
     limit?: number;
-  }): Promise<{ data: any[]; total: number; page: number; totalPages: number }> {
+  }): Promise<{
+    data: any[];
+    total: number;
+    page: number;
+    totalPages: number;
+  }> {
     const conditions: string[] = [];
     const params: any[] = [];
     let idx = 1;
@@ -111,7 +116,8 @@ export class AuditService {
       params.push(filters.fechaHasta);
     }
 
-    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const where =
+      conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     const page = filters.page || 1;
     const limit = Math.min(filters.limit || 50, 100);
     const offset = (page - 1) * limit;

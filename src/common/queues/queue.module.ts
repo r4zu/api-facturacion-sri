@@ -17,7 +17,8 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
         connection: {
           host: configService.get<string>('REDIS_HOST', 'localhost'),
           port: configService.get<number>('REDIS_PORT', 6379),
-          password: configService.get<string>('REDIS_PASSWORD', '') || undefined,
+          password:
+            configService.get<string>('REDIS_PASSWORD', '') || undefined,
           db: configService.get<number>('REDIS_DB', 0),
           maxRetriesPerRequest: null, // Requerido por BullMQ
         },
@@ -34,7 +35,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
           delay: 2000,
         },
         removeOnComplete: { count: 1000 }, // Mantener últimos 1000 jobs completados
-        removeOnFail: { count: 5000 },     // Mantener últimos 5000 jobs fallidos
+        removeOnFail: { count: 5000 }, // Mantener últimos 5000 jobs fallidos
       },
     }),
 

@@ -175,10 +175,7 @@ export class CertificateController {
         if (file.originalname.toLowerCase().endsWith('.p12')) {
           cb(null, true);
         } else {
-          cb(
-            new BadRequestException('Solo se permiten archivos .p12') as any,
-            false,
-          );
+          cb(new BadRequestException('Solo se permiten archivos .p12'), false);
         }
       },
       limits: {

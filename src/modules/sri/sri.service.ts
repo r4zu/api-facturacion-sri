@@ -53,12 +53,18 @@ export class SriService {
   // FACTURA — Delegado a FacturaService
   // ==========================================
 
-  async emitirFactura(dto: CreateFacturaDto): Promise<EmisionEncoladaResponseDto | FacturaResponseDto> {
-    const isAsync = this.configService.get<string>('SRI_EMISION_ASYNC') !== 'false';
+  async emitirFactura(
+    dto: CreateFacturaDto,
+  ): Promise<EmisionEncoladaResponseDto | FacturaResponseDto> {
+    const isAsync =
+      this.configService.get<string>('SRI_EMISION_ASYNC') !== 'false';
     if (!isAsync) {
       return this.facturaService.emitirFactura(dto);
     }
-    const job = await this.emisionQueue.add('emision', { tipo: 'FACTURA', dto });
+    const job = await this.emisionQueue.add('emision', {
+      tipo: 'FACTURA',
+      dto,
+    });
     this.logger.log(`Factura encolada con Job ID: ${job.id}`);
     return {
       mensaje: 'Factura encolada para emisión asíncrona',
@@ -86,11 +92,15 @@ export class SriService {
   async emitirNotaCredito(
     dto: CreateNotaCreditoDto,
   ): Promise<EmisionEncoladaResponseDto | NotaCreditoResponseDto> {
-    const isAsync = this.configService.get<string>('SRI_EMISION_ASYNC') !== 'false';
+    const isAsync =
+      this.configService.get<string>('SRI_EMISION_ASYNC') !== 'false';
     if (!isAsync) {
       return this.notaCreditoService.emitirNotaCredito(dto);
     }
-    const job = await this.emisionQueue.add('emision', { tipo: 'NOTA_CREDITO', dto });
+    const job = await this.emisionQueue.add('emision', {
+      tipo: 'NOTA_CREDITO',
+      dto,
+    });
     this.logger.log(`Nota de crédito encolada con Job ID: ${job.id}`);
     return {
       mensaje: 'Nota de crédito encolada para emisión asíncrona',
@@ -106,11 +116,15 @@ export class SriService {
   async emitirNotaDebito(
     dto: CreateNotaDebitoDto,
   ): Promise<EmisionEncoladaResponseDto | NotaDebitoResponseDto> {
-    const isAsync = this.configService.get<string>('SRI_EMISION_ASYNC') !== 'false';
+    const isAsync =
+      this.configService.get<string>('SRI_EMISION_ASYNC') !== 'false';
     if (!isAsync) {
       return this.notaDebitoService.emitirNotaDebito(dto);
     }
-    const job = await this.emisionQueue.add('emision', { tipo: 'NOTA_DEBITO', dto });
+    const job = await this.emisionQueue.add('emision', {
+      tipo: 'NOTA_DEBITO',
+      dto,
+    });
     this.logger.log(`Nota de débito encolada con Job ID: ${job.id}`);
     return {
       mensaje: 'Nota de débito encolada para emisión asíncrona',
@@ -126,11 +140,15 @@ export class SriService {
   async emitirRetencion(
     dto: CreateRetencionDto,
   ): Promise<EmisionEncoladaResponseDto | RetencionResponseDto> {
-    const isAsync = this.configService.get<string>('SRI_EMISION_ASYNC') !== 'false';
+    const isAsync =
+      this.configService.get<string>('SRI_EMISION_ASYNC') !== 'false';
     if (!isAsync) {
       return this.retencionService.emitirRetencion(dto);
     }
-    const job = await this.emisionQueue.add('emision', { tipo: 'RETENCION', dto });
+    const job = await this.emisionQueue.add('emision', {
+      tipo: 'RETENCION',
+      dto,
+    });
     this.logger.log(`Retención encolada con Job ID: ${job.id}`);
     return {
       mensaje: 'Retención encolada para emisión asíncrona',
@@ -146,11 +164,15 @@ export class SriService {
   async emitirGuiaRemision(
     dto: CreateGuiaRemisionDto,
   ): Promise<EmisionEncoladaResponseDto | GuiaRemisionResponseDto> {
-    const isAsync = this.configService.get<string>('SRI_EMISION_ASYNC') !== 'false';
+    const isAsync =
+      this.configService.get<string>('SRI_EMISION_ASYNC') !== 'false';
     if (!isAsync) {
       return this.guiaRemisionService.emitirGuiaRemision(dto);
     }
-    const job = await this.emisionQueue.add('emision', { tipo: 'GUIA_REMISION', dto });
+    const job = await this.emisionQueue.add('emision', {
+      tipo: 'GUIA_REMISION',
+      dto,
+    });
     this.logger.log(`Guía de remisión encolada con Job ID: ${job.id}`);
     return {
       mensaje: 'Guía de remisión encolada para emisión asíncrona',
@@ -334,7 +356,7 @@ export class SriService {
   /**
    * Obtiene un comprobante por clave de acceso con sus detalles
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   async obtenerComprobante(claveAcceso: string): Promise<any> {
     const comprobante =
       await this.repository.findComprobanteConDetalles(claveAcceso);
@@ -717,7 +739,10 @@ export class SriService {
       }
 
       // Rate limiting configurable para evitar baneos de IP del SRI
-      const delayMs = this.configService.get<number>('SRI_REQUEST_DELAY_MS', 150);
+      const delayMs = this.configService.get<number>(
+        'SRI_REQUEST_DELAY_MS',
+        150,
+      );
       let syncProcessed = 0;
 
       for (const comp of comprobantes) {
@@ -788,8 +813,8 @@ export class SriService {
               (auth.estado as string) === 'NO AUTORIZADO'
             ) {
               await this.repository.updateComprobante(comp.id as string, {
-                estado: auth.estado as string,
-                estado_sri: auth.estado as string,
+                estado: auth.estado,
+                estado_sri: auth.estado,
               });
 
               accion = 'ACTUALIZADO';

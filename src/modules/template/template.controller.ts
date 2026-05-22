@@ -96,7 +96,7 @@ export class TemplateController {
           cb(
             new BadRequestException(
               `Formato de archivo no soportado. Use: ${validExtensions.join(', ')}`,
-            ) as any,
+            ),
             false,
           );
         }

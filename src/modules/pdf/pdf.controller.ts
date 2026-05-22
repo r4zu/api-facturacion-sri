@@ -394,10 +394,7 @@ export class PdfController {
         if (file.originalname.toLowerCase().endsWith('.pdf')) {
           cb(null, true);
         } else {
-          cb(
-            new BadRequestException('Solo se permiten archivos PDF') as any,
-            false,
-          );
+          cb(new BadRequestException('Solo se permiten archivos PDF'), false);
         }
       },
       limits: { fileSize: 50 * 1024 * 1024 }, // 50MB

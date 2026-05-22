@@ -74,7 +74,7 @@ export class ImageController {
           cb(
             new BadRequestException(
               'Solo se permiten imágenes (PNG, JPEG, GIF, WEBP)',
-            ) as any,
+            ),
             false,
           );
         }

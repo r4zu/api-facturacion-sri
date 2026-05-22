@@ -23,7 +23,9 @@ export class SriEmisionProcessor extends WorkerHost {
 
   async process(job: Job): Promise<any> {
     const { tipo, dto } = job.data;
-    this.logger.log(`Procesando emisión asíncrona de ${tipo} - Job ID: ${job.id}`);
+    this.logger.log(
+      `Procesando emisión asíncrona de ${tipo} - Job ID: ${job.id}`,
+    );
 
     try {
       switch (tipo) {
@@ -41,7 +43,10 @@ export class SriEmisionProcessor extends WorkerHost {
           throw new Error(`Tipo de comprobante no soportado: ${tipo}`);
       }
     } catch (error: any) {
-      this.logger.error(`Error procesando job ${job.id} de tipo ${tipo}: ${error.message}`, error.stack);
+      this.logger.error(
+        `Error procesando job ${job.id} de tipo ${tipo}: ${error.message}`,
+        error.stack,
+      );
       throw error;
     }
   }

@@ -100,12 +100,20 @@ export class AuthService {
       type: 'access',
     };
 
-    const expiresInConfig = this.configService.get<string>('jwt.expiresIn', '8h');
-    const accessToken = this.jwtService.sign(payload, { expiresIn: expiresInConfig as any });
-    
+    const expiresInConfig = this.configService.get<string>(
+      'jwt.expiresIn',
+      '8h',
+    );
+    const accessToken = this.jwtService.sign(payload, {
+      expiresIn: expiresInConfig as any,
+    });
+
     // Decodificar para obtener el exp exacto en segundos
-    const decodedAccess = this.jwtService.decode(accessToken) as any;
-    const expiresInSeconds = Math.max(0, decodedAccess.exp - Math.floor(Date.now() / 1000));
+    const decodedAccess = this.jwtService.decode(accessToken);
+    const expiresInSeconds = Math.max(
+      0,
+      decodedAccess.exp - Math.floor(Date.now() / 1000),
+    );
     const expiresAtIso = new Date(decodedAccess.exp * 1000).toISOString();
 
     const refreshPayload: JwtPayload = {
@@ -113,7 +121,9 @@ export class AuthService {
       type: 'refresh',
     };
     // El refresh token suele tener mayor vida, ej. 7 días
-    const refreshToken = this.jwtService.sign(refreshPayload, { expiresIn: '7d' });
+    const refreshToken = this.jwtService.sign(refreshPayload, {
+      expiresIn: '7d',
+    });
 
     return {
       accessToken,
@@ -232,7 +242,9 @@ export class AuthService {
 
     if (payload.type === 'refresh') {
       // Las estrategias de autenticación normales (JWT Guard) no deberían aceptar refresh tokens
-      throw new UnauthorizedException('Token de refresco no permitido para acceder a recursos');
+      throw new UnauthorizedException(
+        'Token de refresco no permitido para acceder a recursos',
+      );
     }
 
     return payload;

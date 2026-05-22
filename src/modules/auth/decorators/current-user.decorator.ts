@@ -6,7 +6,6 @@ import { JwtPayload } from '../dto/auth.dto';
  * Ejemplo: @CurrentUser() user: JwtPayload
  */
 export const CurrentUser = createParamDecorator(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (data: keyof JwtPayload | undefined, ctx: ExecutionContext): any => {
     const request = ctx.switchToHttp().getRequest<{ user: JwtPayload }>();
     const user = request.user;

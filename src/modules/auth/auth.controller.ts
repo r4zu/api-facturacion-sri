@@ -67,7 +67,10 @@ export class AuthController {
     description: 'Sesión renovada exitosamente',
     type: AuthResponseDto,
   })
-  @ApiResponse({ status: 401, description: 'Refresh token inválido o expirado' })
+  @ApiResponse({
+    status: 401,
+    description: 'Refresh token inválido o expirado',
+  })
   async refresh(@Body() dto: RefreshTokenDto): Promise<AuthResponseDto> {
     return this.authService.refreshToken(dto);
   }

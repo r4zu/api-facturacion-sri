@@ -78,13 +78,23 @@ export class NotaDebitoService {
 
       // Get emisor info from database
       const emisor = await this.repository.findEmisorByRuc(dto.emisor.ruc);
-      const puntoEmisionInfo = emisor
-        ? await this.repository.findPuntoEmision(
-            emisor.id,
-            dto.emisor.establecimiento,
-            dto.emisor.puntoEmision,
-          )
-        : null;
+      if (!emisor) {
+        throw new BadRequestException(
+          `Emisor con RUC ${dto.emisor.ruc} no encontrado en la base de datos`,
+        );
+      }
+
+      const puntoEmisionInfo = await this.repository.findPuntoEmision(
+        emisor.id,
+        dto.emisor.establecimiento,
+        dto.emisor.puntoEmision,
+      );
+
+      if (!puntoEmisionInfo) {
+        throw new BadRequestException(
+          `Punto de emisión ${dto.emisor.establecimiento}-${dto.emisor.puntoEmision} no registrado para el emisor ${dto.emisor.ruc}`,
+        );
+      }
 
       // Handle secuencial - auto-generate if not provided
       let secuencial: string;
@@ -92,11 +102,6 @@ export class NotaDebitoService {
         secuencial = dto.secuencial.padStart(9, '0');
         this.logger.log(`Usando secuencial ND proporcionado: ${secuencial}`);
       } else {
-        if (!puntoEmisionInfo) {
-          throw new BadRequestException(
-            'Para auto-generar secuencial ND, el emisor debe estar registrado en la base de datos',
-          );
-        }
         const nextSecuencial = await this.repository.getNextSecuencial(
           puntoEmisionInfo.punto_emision_id,
           TipoComprobante.NOTA_DEBITO,

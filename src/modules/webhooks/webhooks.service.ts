@@ -7,7 +7,13 @@ import {
 import { OnEvent } from '@nestjs/event-emitter';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
+import { ConfigService } from '@nestjs/config';
+import { writeFileSync } from 'fs';
+import { join } from 'path';
 import { DatabaseService } from '../../database/database.service';
+import { PdfService } from '../pdf/pdf.service';
+import { TemplateService } from '../template/template.service';
+import { STORAGE_PATHS } from '../../common/utils/storage-paths';
 import {
   CreateWebhookDto,
   UpdateWebhookDto,
@@ -24,6 +30,9 @@ export class WebhooksService {
   constructor(
     private readonly db: DatabaseService,
     @InjectQueue('webhook-dispatch') private readonly webhookQueue: Queue,
+    private readonly pdfService: PdfService,
+    private readonly templateService: TemplateService,
+    private readonly configService: ConfigService,
   ) {}
 
   // =====================
@@ -35,11 +44,193 @@ export class WebhooksService {
     this.logger.log(
       `Evento comprobante.autorizado recibido para ${payload.claveAcceso}`,
     );
-    await this.emit(
-      'comprobante.autorizado' as WebhookEvent,
-      payload,
-      payload.emisorId,
+
+    if (payload.tipoComprobante === '01') {
+      try {
+        this.logger.log(
+          `Generando RIDE PDF para factura: ${payload.claveAcceso}`,
+        );
+        const jsonData = await this.getCarboneDataForFactura(
+          payload.claveAcceso,
+        );
+
+        let templatePath: string;
+        try {
+          templatePath = this.templateService.findTemplate('factura');
+        } catch (e) {
+          try {
+            templatePath = this.templateService.findTemplate('template');
+          } catch (e2) {
+            templatePath = this.templateService.findTemplate(null);
+          }
+        }
+
+        const pdfBuffer = await this.pdfService.generatePDF(
+          jsonData,
+          templatePath,
+        );
+
+        const fileName = `factura_${payload.claveAcceso}.pdf`;
+        const filePath = join(STORAGE_PATHS.pdfsOthers, fileName);
+        writeFileSync(filePath, pdfBuffer);
+
+        const publicUrl = this.configService.get<string>('publicUrl')!;
+        payload.pdfUrl = `${publicUrl}/pdfs/others/${fileName}`;
+        this.logger.log(`RIDE PDF generado y guardado en: ${payload.pdfUrl}`);
+      } catch (error: any) {
+        this.logger.error(
+          `Error generando RIDE PDF para ${payload.claveAcceso}: ${error.message}`,
+        );
+      }
+    }
+
+    await this.emit('comprobante.autorizado', payload, payload.emisorId);
+  }
+
+  /**
+   * Obtiene todos los datos relacionados con un comprobante (factura) y los formatea
+   * para que coincidan con la estructura esperada por la plantilla de Carbone (factura.html)
+   */
+  async getCarboneDataForFactura(claveAcceso: string): Promise<any> {
+    const comprobante = await this.db.queryOne<any>(
+      `SELECT 
+        c.*,
+        e.ruc as ruc_emisor,
+        e.razon_social as razon_social_emisor,
+        e.nombre_comercial as nombre_comercial_emisor,
+        e.direccion_matriz as dir_matriz_emisor,
+        e.obligado_contabilidad as obliged_contabilidad_emisor,
+        est.codigo as establecimiento,
+        pe.codigo as punto_emision
+      FROM comprobantes c
+      LEFT JOIN emisores e ON c.emisor_id = e.id
+      LEFT JOIN puntos_emision pe ON c.punto_emision_id = pe.id
+      LEFT JOIN establecimientos est ON pe.establecimiento_id = est.id
+      WHERE c.clave_acceso = $1`,
+      [claveAcceso],
     );
+
+    if (!comprobante) {
+      throw new Error(
+        `Comprobante con clave de acceso ${claveAcceso} no encontrado`,
+      );
+    }
+
+    const [detallesResult, pagosResult, totalesResult] = await Promise.all([
+      this.db.query<any>(
+        `SELECT codigo_principal, descripcion, cantidad, precio_unitario, precio_total_sin_impuesto
+         FROM comprobante_detalles
+         WHERE comprobante_id = $1
+         ORDER BY id ASC`,
+        [comprobante.id],
+      ),
+      this.db.query<any>(
+        `SELECT forma_pago, total
+         FROM comprobante_pagos
+         WHERE comprobante_id = $1`,
+        [comprobante.id],
+      ),
+      this.db.query<any>(
+        `SELECT codigo, codigo_porcentaje, base_imponible, valor
+         FROM comprobante_totales
+         WHERE comprobante_id = $1`,
+        [comprobante.id],
+      ),
+    ]);
+
+    const emisor = {
+      ruc: comprobante.ruc_emisor || '',
+      razonSocial: comprobante.razon_social_emisor || '',
+      nombreComercial:
+        comprobante.nombre_comercial_emisor ||
+        comprobante.razon_social_emisor ||
+        '',
+      dirMatriz: comprobante.dir_matriz_emisor || '',
+      establecimiento: comprobante.establecimiento || '001',
+      puntoEmision: comprobante.punto_emision || '001',
+      obligadoContabilidad: comprobante.obliged_contabilidad_emisor
+        ? 'SI'
+        : 'NO',
+    };
+
+    const comprador = {
+      razonSocial: comprobante.receptor_razon_social || '',
+      identificacion: comprobante.receptor_identificacion || '',
+      direccion: comprobante.receptor_direccion || 'S/D',
+      telefono: comprobante.receptor_telefono || 'S/D',
+      email: comprobante.receptor_email || 'S/D',
+    };
+
+    const detalles = detallesResult.rows.map((d: any) => ({
+      codigoPrincipal: d.codigo_principal || '',
+      descripcion: d.descripcion || '',
+      cantidad: parseFloat(d.cantidad) || 0,
+      precioUnitario: (parseFloat(d.precio_unitario) || 0).toFixed(2),
+      baseImponible: (parseFloat(d.precio_total_sin_impuesto) || 0).toFixed(2),
+    }));
+
+    const METODOS_PAGO: Record<string, string> = {
+      '01': 'Sin utilización del sistema financiero (Efectivo)',
+      '15': 'Compensación de deudas',
+      '16': 'Tarjeta de débito',
+      '17': 'Dinero electrónico',
+      '18': 'Tarjeta de prepago',
+      '19': 'Tarjeta de crédito',
+      '20': 'Otros con utilización del sistema financiero',
+      '21': 'Endoso de títulos',
+    };
+
+    const pagos = pagosResult.rows.map((p: any) => ({
+      metodo:
+        METODOS_PAGO[p.forma_pago] ||
+        p.forma_pago ||
+        'Otros con utilización del sistema financiero',
+      total: (parseFloat(p.total) || 0).toFixed(2),
+    }));
+
+    if (pagos.length === 0) {
+      pagos.push({
+        metodo: 'Otros con utilización del sistema financiero',
+        total: (parseFloat(comprobante.importe_total) || 0).toFixed(2),
+      });
+    }
+
+    let subtotal0Val = 0;
+    let subtotalVal = 0;
+    let ivaVal = 0;
+
+    for (const row of totalesResult.rows) {
+      const base = parseFloat(row.base_imponible) || 0;
+      const valor = parseFloat(row.valor) || 0;
+      if (row.codigo_porcentaje === '0') {
+        subtotal0Val += base;
+      } else if (['2', '3', '4', '5'].includes(row.codigo_porcentaje)) {
+        subtotalVal += base;
+        ivaVal += valor;
+      }
+    }
+
+    const subtotal0 = subtotal0Val.toFixed(2);
+    const subtotal = subtotalVal.toFixed(2);
+    const iva = ivaVal.toFixed(2);
+    const descuento = (parseFloat(comprobante.total_descuento) || 0).toFixed(2);
+    const total = (parseFloat(comprobante.importe_total) || 0).toFixed(2);
+
+    return {
+      secuencial: comprobante.secuencial || '',
+      fechaEmision: comprobante.fecha_emision || '',
+      ambiente: comprobante.ambiente === '2' ? 'PRODUCCIÓN' : 'PRUEBAS',
+      claveAcceso: comprobante.clave_acceso || '',
+      emisor,
+      comprador,
+      detalles,
+      pagos,
+      subtotal0,
+      subtotal,
+      descuento,
+      iva,
+      total,
+    };
   }
 
   @OnEvent('comprobante.rechazado')
@@ -47,11 +238,7 @@ export class WebhooksService {
     this.logger.log(
       `Evento comprobante.rechazado recibido para ${payload.claveAcceso}`,
     );
-    await this.emit(
-      'comprobante.rechazado' as WebhookEvent,
-      payload,
-      payload.emisorId,
-    );
+    await this.emit('comprobante.rechazado', payload, payload.emisorId);
   }
 
   // =====================
@@ -73,7 +260,9 @@ export class WebhooksService {
     query += ` ORDER BY created_at DESC`;
 
     const result = await this.db.query(query, params);
-    return result.rows.map((row: Record<string, unknown>) => this.mapToResponse(row));
+    return result.rows.map((row: Record<string, unknown>) =>
+      this.mapToResponse(row),
+    );
   }
 
   /**
@@ -98,7 +287,9 @@ export class WebhooksService {
     query += ` ORDER BY created_at DESC`;
 
     const result = await this.db.query(query, params);
-    return result.rows.map((row: Record<string, unknown>) => this.mapToResponse(row));
+    return result.rows.map((row: Record<string, unknown>) =>
+      this.mapToResponse(row),
+    );
   }
 
   async findOne(id: string): Promise<WebhookResponseDto> {
@@ -116,7 +307,10 @@ export class WebhooksService {
     return this.mapToResponse(result.rows[0]);
   }
 
-  async create(dto: CreateWebhookDto, tenantId?: string): Promise<WebhookResponseDto> {
+  async create(
+    dto: CreateWebhookDto,
+    tenantId?: string,
+  ): Promise<WebhookResponseDto> {
     const secreto = this.generateSecret();
 
     const result = await this.db.query(
@@ -235,10 +429,9 @@ export class WebhooksService {
     const offset = (page - 1) * limit;
 
     const [countResult, dataResult] = await Promise.all([
-      this.db.query(
-        `SELECT COUNT(*) FROM webhook_logs WHERE config_id = $1`,
-        [id],
-      ),
+      this.db.query(`SELECT COUNT(*) FROM webhook_logs WHERE config_id = $1`, [
+        id,
+      ]),
       this.db.query(
         `SELECT id, evento, payload, status_code, respuesta, intento, exitoso, error, tiempo_respuesta_ms, created_at
          FROM webhook_logs
@@ -306,17 +499,13 @@ export class WebhooksService {
         payload,
       };
 
-      await this.webhookQueue.add(
-        `webhook-${evento}`,
-        jobData,
-        {
-          attempts: (config.reintentos_max as number) || 5,
-          backoff: {
-            type: 'exponential',
-            delay: 3000,
-          },
+      await this.webhookQueue.add(`webhook-${evento}`, jobData, {
+        attempts: (config.reintentos_max as number) || 5,
+        backoff: {
+          type: 'exponential',
+          delay: 3000,
         },
-      );
+      });
     }
   }
 
@@ -344,7 +533,9 @@ export class WebhooksService {
     };
   }
 
-  private mapLogToResponse(row: Record<string, unknown>): WebhookLogResponseDto {
+  private mapLogToResponse(
+    row: Record<string, unknown>,
+  ): WebhookLogResponseDto {
     return {
       id: row.id as string,
       evento: row.evento as string,
@@ -359,4 +550,3 @@ export class WebhooksService {
     };
   }
 }
-

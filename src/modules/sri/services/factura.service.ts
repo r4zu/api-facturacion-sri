@@ -73,25 +73,30 @@ export class FacturaService {
         parseInt(day),
       );
 
+      if (!emisor) {
+        throw new BadRequestException(
+          `Emisor con RUC ${dto.emisor.ruc} no encontrado en la base de datos`,
+        );
+      }
+
       // Buscar punto de emisión
-      const puntoEmisionInfo = emisor
-        ? await this.repository.findPuntoEmision(
-            emisor.id,
-            dto.emisor.establecimiento,
-            dto.emisor.puntoEmision,
-          )
-        : null;
+      const puntoEmisionInfo = await this.repository.findPuntoEmision(
+        emisor.id,
+        dto.emisor.establecimiento,
+        dto.emisor.puntoEmision,
+      );
+
+      if (!puntoEmisionInfo) {
+        throw new BadRequestException(
+          `Punto de emisión ${dto.emisor.establecimiento}-${dto.emisor.puntoEmision} no registrado para el emisor ${dto.emisor.ruc}`,
+        );
+      }
 
       // ─── FASE 1: Transacción corta (~5ms) — Solo reservar secuencial ───
       let secuencial: string;
       if (dto.secuencial) {
         secuencial = dto.secuencial.padStart(9, '0');
       } else {
-        if (!puntoEmisionInfo) {
-          throw new BadRequestException(
-            `No se puede generar secuencial automático: punto de emisión ${dto.emisor.establecimiento}-${dto.emisor.puntoEmision} no encontrado para emisor ${dto.emisor.ruc}`,
-          );
-        }
         secuencial = await this.repository.executeInTransaction(
           async (client) => {
             return this.repository.getNextSecuencial(
@@ -216,7 +221,8 @@ export class FacturaService {
         });
       } else if (
         resultado.estado === 'RECHAZADO' ||
-        resultado.estado === 'DEVUELTA'
+        resultado.estado === 'DEVUELTA' ||
+        resultado.estado === 'NO AUTORIZADO'
       ) {
         this.eventEmitter.emit('comprobante.rechazado', {
           emisorId: emisor?.id,

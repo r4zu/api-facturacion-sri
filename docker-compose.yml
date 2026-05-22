@@ -11,6 +11,10 @@ services:
       - .env
     environment:
       PORT: 8080
+      TEMPLATES_DIR: /data/templates
+      PDFS_DIR: /data/pdfs
+      CERTS_DIR: /data/certs
+      XMLS_DIR: /data/xmls
     volumes:
       - ../data/templates:/data/templates
       - ../data/pdfs:/data/pdfs
