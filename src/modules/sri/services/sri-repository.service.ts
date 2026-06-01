@@ -531,6 +531,8 @@ export class SriRepositoryService {
         pe.codigo as punto_emision,
         c.created_at,
         c.updated_at,
+        c.doc_modificado_numero,
+        c.doc_modificado_tipo,
         COUNT(*) OVER() AS full_count
       FROM comprobantes c
       LEFT JOIN emisores e ON c.emisor_id = e.id

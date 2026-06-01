@@ -82,6 +82,43 @@ export class WebhooksService {
           `Error generando RIDE PDF para ${payload.claveAcceso}: ${error.message}`,
         );
       }
+    } else if (payload.tipoComprobante === '04') {
+      try {
+        this.logger.log(
+          `Generando RIDE PDF para nota de crédito: ${payload.claveAcceso}`,
+        );
+        const jsonData = await this.getCarboneDataForNotaCredito(
+          payload.claveAcceso,
+        );
+
+        let templatePath: string;
+        try {
+          templatePath = this.templateService.findTemplate('nota-credito');
+        } catch (e) {
+          try {
+            templatePath = this.templateService.findTemplate('template');
+          } catch (e2) {
+            templatePath = this.templateService.findTemplate(null);
+          }
+        }
+
+        const pdfBuffer = await this.pdfService.generatePDF(
+          jsonData,
+          templatePath,
+        );
+
+        const fileName = `nota_credito_${payload.claveAcceso}.pdf`;
+        const filePath = join(STORAGE_PATHS.pdfsOthers, fileName);
+        writeFileSync(filePath, pdfBuffer);
+
+        const publicUrl = this.configService.get<string>('publicUrl')!;
+        payload.pdfUrl = `${publicUrl}/pdfs/others/${fileName}`;
+        this.logger.log(`RIDE PDF generado y guardado en: ${payload.pdfUrl}`);
+      } catch (error: any) {
+        this.logger.error(
+          `Error generando RIDE PDF para ${payload.claveAcceso}: ${error.message}`,
+        );
+      }
     }
 
     await this.emit('comprobante.autorizado', payload, payload.emisorId);
@@ -230,6 +267,134 @@ export class WebhooksService {
       descuento,
       iva,
       total,
+    };
+  }
+
+  /**
+   * Obtiene todos los datos relacionados con una Nota de Crédito y los formatea
+   * para la plantilla de Carbone
+   */
+  async getCarboneDataForNotaCredito(claveAcceso: string): Promise<any> {
+    const comprobante = await this.db.queryOne<any>(
+      `SELECT 
+        c.*,
+        e.ruc as ruc_emisor,
+        e.razon_social as razon_social_emisor,
+        e.nombre_comercial as nombre_comercial_emisor,
+        e.direccion_matriz as dir_matriz_emisor,
+        e.obligado_contabilidad as obliged_contabilidad_emisor,
+        est.codigo as establecimiento,
+        pe.codigo as punto_emision
+      FROM comprobantes c
+      LEFT JOIN emisores e ON c.emisor_id = e.id
+      LEFT JOIN puntos_emision pe ON c.punto_emision_id = pe.id
+      LEFT JOIN establecimientos est ON pe.establecimiento_id = est.id
+      WHERE c.clave_acceso = $1`,
+      [claveAcceso],
+    );
+
+    if (!comprobante) {
+      throw new Error(
+        `Comprobante con clave de acceso ${claveAcceso} no encontrado`,
+      );
+    }
+
+    const [detallesResult, totalesResult] = await Promise.all([
+      this.db.query<any>(
+        `SELECT codigo_principal, descripcion, cantidad, precio_unitario, precio_total_sin_impuesto
+         FROM comprobante_detalles
+         WHERE comprobante_id = $1
+         ORDER BY id ASC`,
+        [comprobante.id],
+      ),
+      this.db.query<any>(
+        `SELECT codigo, codigo_porcentaje, base_imponible, valor
+         FROM comprobante_totales
+         WHERE comprobante_id = $1`,
+        [comprobante.id],
+      ),
+    ]);
+
+    const emisor = {
+      ruc: comprobante.ruc_emisor || '',
+      razonSocial: comprobante.razon_social_emisor || '',
+      nombreComercial:
+        comprobante.nombre_comercial_emisor ||
+        comprobante.razon_social_emisor ||
+        '',
+      dirMatriz: comprobante.dir_matriz_emisor || '',
+      establecimiento: comprobante.establecimiento || '001',
+      puntoEmision: comprobante.punto_emision || '001',
+      obligadoContabilidad: comprobante.obliged_contabilidad_emisor
+        ? 'SI'
+        : 'NO',
+    };
+
+    const comprador = {
+      razonSocial: comprobante.receptor_razon_social || '',
+      identificacion: comprobante.receptor_identificacion || '',
+      direccion: comprobante.receptor_direccion || 'S/D',
+      telefono: comprobante.receptor_telefono || 'S/D',
+      email: comprobante.receptor_email || 'S/D',
+    };
+
+    const detalles = detallesResult.rows.map((d: any) => ({
+      codigoPrincipal: d.codigo_principal || '',
+      descripcion: d.descripcion || '',
+      cantidad: parseFloat(d.cantidad) || 0,
+      precioUnitario: (parseFloat(d.precio_unitario) || 0).toFixed(2),
+      baseImponible: (parseFloat(d.precio_total_sin_impuesto) || 0).toFixed(2),
+    }));
+
+    let subtotal0Val = 0;
+    let subtotalVal = 0;
+    let ivaVal = 0;
+
+    for (const row of totalesResult.rows) {
+      const base = parseFloat(row.base_imponible) || 0;
+      const valor = parseFloat(row.valor) || 0;
+      if (row.codigo_porcentaje === '0') {
+        subtotal0Val += base;
+      } else if (['2', '3', '4', '5'].includes(row.codigo_porcentaje)) {
+        subtotalVal += base;
+        ivaVal += valor;
+      }
+    }
+
+    const subtotal0 = subtotal0Val.toFixed(2);
+    const subtotal = subtotalVal.toFixed(2);
+    const iva = ivaVal.toFixed(2);
+    const descuento = (parseFloat(comprobante.total_descuento) || 0).toFixed(2);
+    const total = (parseFloat(comprobante.importe_total) || 0).toFixed(2);
+
+    const docModificadoFechaRaw = comprobante.doc_modificado_fecha;
+    let docModificadoFecha = '';
+    if (docModificadoFechaRaw) {
+      const d = new Date(docModificadoFechaRaw);
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      docModificadoFecha = `${day}/${month}/${year}`;
+    }
+
+    return {
+      secuencial: comprobante.secuencial || '',
+      fechaEmision: comprobante.fecha_emision || '',
+      ambiente: comprobante.ambiente === '2' ? 'PRODUCCIÓN' : 'PRUEBAS',
+      claveAcceso: comprobante.clave_acceso || '',
+      emisor,
+      comprador,
+      detalles,
+      subtotal0,
+      subtotal,
+      descuento,
+      iva,
+      total,
+      docModificadoTipo: comprobante.doc_modificado_tipo || '01',
+      docModificadoNumero: comprobante.doc_modificado_numero || '',
+      docModificadoFecha,
+      motivo: comprobante.motivo || 'ANULACION DE TRANSACCION',
+      valorModificacion: (parseFloat(comprobante.valor_modificacion || comprobante.importe_total) || 0).toFixed(2),
     };
   }
 

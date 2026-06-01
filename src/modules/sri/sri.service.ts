@@ -340,6 +340,8 @@ export class SriService {
       numAutorizacion: c.num_autorizacion,
       createdAt: c.created_at,
       updatedAt: c.updated_at,
+      docModificadoNumero: c.doc_modificado_numero,
+      docModificadoTipo: c.doc_modificado_tipo,
     }));
 
     return {
@@ -806,6 +808,8 @@ export class SriService {
                 secuencial: comp.secuencial,
                 fechaAutorizacion: auth.fechaAutorizacion,
                 numeroAutorizacion: auth.numeroAutorizacion,
+                docModificadoNumero: comp.docModificadoNumero,
+                docModificadoTipo: comp.docModificadoTipo,
               });
             } else if (
               (auth.estado as string) === 'RECHAZADO' ||
@@ -829,6 +833,8 @@ export class SriService {
                 tipoComprobante: comp.tipoComprobante,
                 estado: auth.estado as string,
                 mensajes: auth.mensajes?.mensaje || [],
+                docModificadoNumero: comp.docModificadoNumero,
+                docModificadoTipo: comp.docModificadoTipo,
               });
             }
           } else {
