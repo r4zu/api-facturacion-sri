@@ -56,12 +56,28 @@ export class WebhooksService {
 
         let templatePath: string;
         try {
-          templatePath = this.templateService.findTemplate('factura');
+          const compInfo = await this.db.queryOne<any>(
+            `SELECT e.tenant_id 
+             FROM comprobantes c 
+             LEFT JOIN emisores e ON c.emisor_id = e.id 
+             WHERE c.clave_acceso = $1`,
+            [payload.claveAcceso],
+          );
+          const tenantId = compInfo?.tenant_id;
+          if (tenantId) {
+            templatePath = this.templateService.findTemplate(`${tenantId}_factura`);
+          } else {
+            throw new Error('No tenantId associated');
+          }
         } catch (e) {
           try {
-            templatePath = this.templateService.findTemplate('template');
+            templatePath = this.templateService.findTemplate('factura');
           } catch (e2) {
-            templatePath = this.templateService.findTemplate(null);
+            try {
+              templatePath = this.templateService.findTemplate('template');
+            } catch (e3) {
+              templatePath = this.templateService.findTemplate(null);
+            }
           }
         }
 
@@ -93,12 +109,28 @@ export class WebhooksService {
 
         let templatePath: string;
         try {
-          templatePath = this.templateService.findTemplate('nota-credito');
+          const compInfo = await this.db.queryOne<any>(
+            `SELECT e.tenant_id 
+             FROM comprobantes c 
+             LEFT JOIN emisores e ON c.emisor_id = e.id 
+             WHERE c.clave_acceso = $1`,
+            [payload.claveAcceso],
+          );
+          const tenantId = compInfo?.tenant_id;
+          if (tenantId) {
+            templatePath = this.templateService.findTemplate(`${tenantId}_nota-credito`);
+          } else {
+            throw new Error('No tenantId associated');
+          }
         } catch (e) {
           try {
-            templatePath = this.templateService.findTemplate('template');
+            templatePath = this.templateService.findTemplate('nota-credito');
           } catch (e2) {
-            templatePath = this.templateService.findTemplate(null);
+            try {
+              templatePath = this.templateService.findTemplate('template');
+            } catch (e3) {
+              templatePath = this.templateService.findTemplate(null);
+            }
           }
         }
 
